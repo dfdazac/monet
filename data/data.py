@@ -179,7 +179,7 @@ def generate_sprites(num_samples):
 @ex.command(unobserved=True)
 def show_samples(dataset, num_samples):
     dataset = torch.load(osp.join(dataset, 'data.pt'))
-    grid = make_grid(dataset[:num_samples]).permute(1, 2, 0).numpy()
+    grid = make_grid(dataset[:num_samples]).permute(1, 2, 0)
     plt.imshow(grid)
     plt.show()
 

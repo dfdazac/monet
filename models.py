@@ -37,7 +37,6 @@ class VAE(nn.Module):
                      nn.Conv2d(in_channels=64, out_channels=64,
                                kernel_size=3, padding=1)]
         self.dec_convs = nn.ModuleList(dec_convs)
-        self.decoder = self.sb_decoder
         self.last_conv = nn.Conv2d(in_channels=64, out_channels=3,
                                    kernel_size=3, padding=1)
 
