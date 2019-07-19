@@ -51,8 +51,8 @@ def train(dataset, lr, steps, _run, _log):
         _log.warning('Running without observers')
 
     train_file = os.path.join('data', dataset, 'data.pt')
-    dataset = TensorDataset(torch.load(train_file))
-    loader = DataLoader(dataset, batch_size=16, shuffle=True, num_workers=1)
+    data = TensorDataset(torch.load(train_file))
+    loader = DataLoader(data, batch_size=16, shuffle=True, num_workers=1)
     iterator = make_data_iterator(loader)
 
     model = VAE(im_size=64)
