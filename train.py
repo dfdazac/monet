@@ -90,4 +90,8 @@ def train(dataset, lr, steps, _run, _log):
         if step % save_every == 0:
             plot_examples(batch.cpu(), f'original_{step:d}')
             plot_examples(out.cpu().detach(), f'reconstruction_{step:d}')
-            torch.save(model.state_dict(), f'vae.pt')
+
+    model_file = f'vae_{dataset}.pt'
+    torch.save(model.state_dict(), model_file)
+    _run.add_artifact(model_file)
+    os.remove(model_file)
