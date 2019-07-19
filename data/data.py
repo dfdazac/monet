@@ -173,7 +173,7 @@ def generate_sprites(num_samples):
 
     shapes = ['ellipse', 'rectangle', 'polygon']
     generate_dataset('sprites', num_samples, num_sprites=1, shapes=shapes,
-                     colors=colors, bg_color=(128, 0, 0))
+                     colors=colors, bg_color=(255, 255, 255))
 
 
 @ex.command(unobserved=True)

@@ -63,7 +63,8 @@ class VAE(nn.Module):
         # Expand grids to batches and concatenate on the channel dimension
         # Shape: Nx(D+2)x64x64
         x = torch.cat((self.x_grid.expand(batch_size, -1, -1, -1),
-                       self.y_grid.expand(batch_size, -1, -1, -1), z), dim=1)
+                       self.y_grid.expand(batch_size, -1, -1, -1),
+                       z), dim=1)
 
         for module in self.dec_convs:
             x = F.relu(module(x))

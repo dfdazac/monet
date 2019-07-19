@@ -16,7 +16,7 @@ ex = sacred.Experiment()
 def config():
     dataset = 'circles'
     lr = 1e-4
-    epochs = 100
+    steps = 100
 
 
 @ex.capture
@@ -33,52 +33,61 @@ def plot_examples(examples, name, _run):
     os.remove(img_path)
 
 
+def make_data_iterator(loader):
+    iterator = iter(loader)
+    while True:
+        try:
+            yield next(iterator)[0].to(device)
+        except StopIteration:
+            iterator = iter(loader)
+            continue
+
+
 @ex.automain
-def train(dataset, lr, epochs, _run, _log):
+def train(dataset, lr, steps, _run, _log):
     train_file = os.path.join('data', dataset, 'data.pt')
     dataset = TensorDataset(torch.load(train_file))
     loader = DataLoader(dataset, batch_size=16, shuffle=True)
+    iterator = make_data_iterator(loader)
 
     model = VAE(im_size=64)
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr)
 
     log_every = 1
+    save_every = 100
+    train_loss = 0
+    train_mse = 0
+    train_kl = 0
+    log = '[{:d}/{:d}] MSE: {:.6f}  KL: {:.6f}  Loss: {:.6f}'
 
-    steps = 0
-    log = '[{:d}/{:d}] MSE: {:.6f}  KL: {:.6f}  Total: {:.6f}'
-    for epoch in range(1, epochs + 1):
-        _log.info('Epoch {:d}'.format(epoch))
+    for step in range(1, steps + 1):
+        # Train
+        batch = next(iterator)
+        mse_loss, kl, out = model(batch)
+        loss = mse_loss + kl
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
 
-        train_loss = 0
-        train_mse = 0
-        train_kl = 0
-        for i, d in enumerate(loader):
-            steps += 1
-            batch = d[0].to(device)
-            optimizer.zero_grad()
-            mse_loss, kl, out = model(batch)
-            loss = mse_loss + kl
-            loss.backward()
-            optimizer.step()
+        # Log
+        train_loss += loss.item()
+        train_mse += mse_loss.item()
+        train_kl += kl.item()
+        if step % log_every == 0:
+            train_loss /= log_every
+            train_mse /= log_every
+            train_kl /= log_every
+            _log.info(log.format(step, steps, train_mse, train_kl, train_loss))
+            _run.log_scalar('mse', train_mse, step)
+            _run.log_scalar('kl', train_kl, step)
+            _run.log_scalar('loss', train_loss, step)
+            train_loss = 0
+            train_mse = 0
+            train_kl = 0
 
-            train_loss += loss.item()
-            train_mse += mse_loss.item()
-            train_kl += kl.item()
-            if (i + 1) % log_every == 0:
-                train_loss /= log_every
-                train_mse /= log_every
-                train_kl /= log_every
-                _log.info(log.format(i + 1, len(loader), train_mse, train_kl,
-                                     train_loss))
-                _run.log_scalar('loss/total', train_loss, steps)
-                _run.log_scalar('loss/mse', train_mse, steps)
-                _run.log_scalar('loss/kl', train_kl, steps)
-                train_loss = 0
-                train_mse = 0
-                train_kl = 0
-
-        plot_examples(batch.cpu(), 'original')
-        plot_examples(out.cpu().detach(), 'reconstruction')
-
-    torch.save(model.state_dict(), f'vae.pt')
+        # Save
+        if step % save_every == 0:
+            plot_examples(batch.cpu(), f'original_{step:d}')
+            plot_examples(out.cpu().detach(), f'reconstruction_{step:d}')
+            torch.save(model.state_dict(), f'vae.pt')
