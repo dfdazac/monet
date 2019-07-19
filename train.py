@@ -17,6 +17,8 @@ add_observers(ex)
 @ex.config
 def config():
     dataset = 'circles'
+    decoder = 'deconv'
+    beta = 2.0
     lr = 1e-4
     steps = 100
 
@@ -46,7 +48,7 @@ def make_data_iterator(loader):
 
 
 @ex.automain
-def train(dataset, lr, steps, _run, _log):
+def train(dataset, decoder, beta, lr, steps, _run, _log):
     if len(_run.observers) == 0:
         _log.warning('Running without observers')
 
@@ -55,7 +57,7 @@ def train(dataset, lr, steps, _run, _log):
     loader = DataLoader(data, batch_size=16, shuffle=True, num_workers=1)
     iterator = make_data_iterator(loader)
 
-    model = VAE(im_size=64)
+    model = VAE(im_size=64, decoder=decoder)
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr)
 
@@ -70,7 +72,7 @@ def train(dataset, lr, steps, _run, _log):
         # Train
         batch = next(iterator)
         mse_loss, kl, out = model(batch)
-        loss = mse_loss + kl
+        loss = mse_loss + beta * kl
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
