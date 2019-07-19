@@ -6,9 +6,11 @@ import matplotlib.pyplot as plt
 import sacred
 
 from models import VAE
+from utils import add_observers
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 ex = sacred.Experiment()
+add_observers(ex)
 
 
 # noinspection PyUnusedLocal
@@ -45,17 +47,20 @@ def make_data_iterator(loader):
 
 @ex.automain
 def train(dataset, lr, steps, _run, _log):
+    if len(_run.observers) == 0:
+        _log.warning('Running without observers')
+
     train_file = os.path.join('data', dataset, 'data.pt')
     dataset = TensorDataset(torch.load(train_file))
-    loader = DataLoader(dataset, batch_size=16, shuffle=True)
+    loader = DataLoader(dataset, batch_size=16, shuffle=True, num_workers=1)
     iterator = make_data_iterator(loader)
 
     model = VAE(im_size=64)
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr)
 
-    log_every = 1
-    save_every = 100
+    log_every = 200
+    save_every = 20000
     train_loss = 0
     train_mse = 0
     train_kl = 0
