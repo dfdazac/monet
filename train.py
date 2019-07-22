@@ -1,15 +1,14 @@
 import os
+import sacred
 import torch
 from torch.utils.data import TensorDataset, DataLoader
-from torchvision.utils import make_grid
-import matplotlib.pyplot as plt
-import sacred
 
 from models import VAE
-from utils import add_observers
+from utils import (make_data_iterator, add_observers, train_ingredient,
+                   plot_examples)
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-ex = sacred.Experiment()
+ex = sacred.Experiment(ingredients=[train_ingredient])
 add_observers(ex)
 
 
@@ -20,31 +19,7 @@ def config():
     decoder = 'deconv'
     beta = 2.0
     lr = 1e-4
-    steps = 100
-
-
-@ex.capture
-def plot_examples(examples, name, _run):
-    clipped = torch.clamp(examples.detach(), 0, 1)
-    image = make_grid(clipped)
-    plt.cla()
-    plt.imshow(image.permute(1, 2, 0))
-    plt.axis('off')
-
-    img_path = name + '.png'
-    plt.savefig(img_path)
-    _run.add_artifact(img_path, img_path)
-    os.remove(img_path)
-
-
-def make_data_iterator(loader):
-    iterator = iter(loader)
-    while True:
-        try:
-            yield next(iterator)[0].to(device)
-        except StopIteration:
-            iterator = iter(loader)
-            continue
+    steps = 200000
 
 
 @ex.automain
@@ -70,7 +45,7 @@ def train(dataset, decoder, beta, lr, steps, _run, _log):
 
     for step in range(1, steps + 1):
         # Train
-        batch = next(iterator)
+        batch = next(iterator).to(device)
         mse_loss, kl, out = model(batch)
         loss = mse_loss + beta * kl
         optimizer.zero_grad()
