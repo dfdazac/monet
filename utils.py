@@ -1,5 +1,6 @@
 import os
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 from torchvision.utils import make_grid
 from sacred.observers import MongoObserver
@@ -40,3 +41,25 @@ def plot_examples(examples, name, _run=None):
         plt.savefig(img_path)
         _run.add_artifact(img_path, img_path)
         os.remove(img_path)
+
+
+def generate_spaced_coordinates(low, high, num_points, levels):
+    x = []
+    y = []
+    labels = []
+    values = np.linspace(0, levels, num_points, endpoint=True)
+    for i in values:
+        for j in values:
+            if i % 1 == 0 or j % 1 == 0:
+                x.append(j)
+                y.append(i)
+                if j % 1 == 0:
+                    labels.append(np.floor(j))
+                elif i % 1 == 0:
+                    labels.append(np.floor(i) + levels + 5)
+
+    coords = np.stack((x, y), axis=0)
+    coords = coords / levels * (high - low) + low
+    x, y = coords
+
+    return x, y, labels
