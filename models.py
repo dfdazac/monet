@@ -11,9 +11,10 @@ class VAE(nn.Module):
         - Input: :math:`(N, C_{in}, H_{in}, W_{in})`
         - Output: :math:`(N, C_{in}, H_{in}, W_{in})`
     """
-    def __init__(self, im_size, decoder='sbd'):
+    def __init__(self, im_size, in_channels, decoder='sbd'):
         super(VAE, self).__init__()
-        enc_convs = [nn.Conv2d(in_channels=3, out_channels=64,
+
+        enc_convs = [nn.Conv2d(in_channels, out_channels=64,
                                kernel_size=4, stride=2, padding=1)]
         enc_convs.extend([nn.Conv2d(in_channels=64, out_channels=64,
                                     kernel_size=4, stride=2, padding=1)
@@ -31,7 +32,8 @@ class VAE(nn.Module):
                          for i in range(4)]
             self.dec_convs = nn.ModuleList(dec_convs)
             self.decoder = self.deconv_decoder
-            self.last_conv = nn.ConvTranspose2d(in_channels=64, out_channels=3,
+            self.last_conv = nn.ConvTranspose2d(in_channels=64,
+                                                out_channels=in_channels,
                                                 kernel_size=4, stride=2,
                                                 padding=1)
 
@@ -51,7 +53,8 @@ class VAE(nn.Module):
                                    kernel_size=3, padding=1)]
             self.dec_convs = nn.ModuleList(dec_convs)
             self.decoder = self.sb_decoder
-            self.last_conv = nn.Conv2d(in_channels=64, out_channels=3,
+            self.last_conv = nn.Conv2d(in_channels=64,
+                                       out_channels=in_channels,
                                        kernel_size=3, padding=1)
 
     def encoder(self, x):
@@ -99,10 +102,15 @@ class VAE(nn.Module):
         return x
 
     def forward(self, x):
-        batch_size = x.size(0)
         mu, logvar = self.encoder(x)
         z = self.sample(mu, logvar)
         x_rec = self.decoder(z)
+
+        return mu, logvar, x_rec
+
+    def loss(self, x):
+        batch_size = x.shape[0]
+        mu, logvar, x_rec = self.forward(x)
 
         kl = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(dim=-1).mean()
         mse_loss = F.mse_loss(x_rec, x, reduction='none').view(batch_size, -1)
@@ -219,3 +227,52 @@ class AttentionNetwork(nn.Module):
         mask = scope + F.logsigmoid(x)
         scope = scope + F.logsigmoid(-x)
         return mask, scope
+
+
+class MONet(nn.Module):
+    def __init__(self, im_size, steps, beta, gamma):
+        super(MONet, self).__init__()
+
+        self.component_vae = VAE(im_size, in_channels=4)
+        self.attention = AttentionNetwork()
+        self.steps = steps
+        self.beta = beta
+        self.gamma = gamma
+
+        init_scope = torch.zeros((im_size, im_size))
+        init_scope = init_scope.view((1, 1) + init_scope.shape)
+        self.register_buffer('init_scope', init_scope)
+
+    def forward(self, x):
+        batch_size = x.shape[0]
+        log_scope = self.init_scope.expand(batch_size, -1, -1, -1)
+        loss = 0
+
+        for s in range(self.steps):
+            if s < self.steps - 1:
+                log_mask, log_scope = self.attention(x, log_scope)
+            else:
+                log_mask = log_scope
+
+            vae_in = torch.cat((x, log_mask), dim=1)
+            mu, logvar, vae_out = self.component_vae(vae_in)
+
+            # Reconstructions
+            x_rec, log_mask_rec = torch.split(vae_out, 3, dim=1)
+            log_mask_rec = F.logsigmoid(log_mask_rec)
+
+            # Masked component reconstruction log-loss
+            rec_loss = 10 * F.mse_loss(x_rec, x, reduction='none') + log_mask
+            rec_loss = torch.clamp_min(rec_loss, min=0)
+            rec_loss = rec_loss.view(batch_size, -1).sum(dim=-1).mean()
+            loss += rec_loss
+
+            # KL divergence with latent prior
+            kl = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(dim=-1)
+            loss += self.beta * kl.mean()
+
+            # KL divergence between mask and reconstruction distributions
+            loss += self.gamma * F.kl_div(log_mask_rec, torch.exp(log_mask),
+                                          reduction='batchmean')
+
+        return loss
