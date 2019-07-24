@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.distributions import Bernoulli, kl_divergence
 
 
 class VAE(nn.Module):
@@ -230,14 +231,12 @@ class AttentionNetwork(nn.Module):
 
 
 class MONet(nn.Module):
-    def __init__(self, im_size, steps, beta, gamma):
+    def __init__(self, im_size, steps):
         super(MONet, self).__init__()
 
         self.component_vae = VAE(im_size, in_channels=4)
         self.attention = AttentionNetwork()
         self.steps = steps
-        self.beta = beta
-        self.gamma = gamma
 
         init_scope = torch.zeros((im_size, im_size))
         init_scope = init_scope.view((1, 1) + init_scope.shape)
@@ -246,7 +245,8 @@ class MONet(nn.Module):
     def forward(self, x):
         batch_size = x.shape[0]
         log_scope = self.init_scope.expand(batch_size, -1, -1, -1)
-        loss = 0
+
+        mse_sum = kl_sum = mask_kl_sum = 0.0
 
         for s in range(self.steps):
             if s < self.steps - 1:
@@ -265,14 +265,15 @@ class MONet(nn.Module):
             rec_loss = 10 * F.mse_loss(x_rec, x, reduction='none') + log_mask
             rec_loss = torch.clamp_min(rec_loss, min=0)
             rec_loss = rec_loss.view(batch_size, -1).sum(dim=-1).mean()
-            loss += rec_loss
+            mse_sum += rec_loss
 
             # KL divergence with latent prior
             kl = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(dim=-1)
-            loss += self.beta * kl.mean()
+            kl_sum += kl.mean()
 
             # KL divergence between mask and reconstruction distributions
-            loss += self.gamma * F.kl_div(log_mask_rec, torch.exp(log_mask),
-                                          reduction='batchmean')
+            mask_kl = F.kl_div(log_mask_rec, torch.exp(log_mask),
+                               reduction='batchmean')
+            mask_kl_sum += mask_kl
 
-        return loss
+        return mse_sum, kl_sum, mask_kl_sum
