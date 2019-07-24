@@ -267,20 +267,20 @@ class MONet(nn.Module):
             # Masked component reconstruction log-loss
             rec_loss = 10 * F.mse_loss(x_rec, x, reduction='none') + log_mask
             rec_loss = torch.clamp_min(rec_loss, min=0)
-            rec_loss = rec_loss.view(batch_size, -1).sum(dim=-1).mean()
+            rec_loss = rec_loss.view(batch_size, -1).sum(dim=-1)
             mse_sum += rec_loss
 
             # KL divergence with latent prior
             kl = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(dim=-1)
-            kl_sum += kl.mean()
+            kl_sum += kl
 
             # KL divergence between mask and reconstruction distributions
             mask_p = Bernoulli(logits=log_mask)
             mask_q = Bernoulli(logits=log_mask_rec)
             mask_kl = kl_divergence(mask_p, mask_q).view(batch_size,
                                                          -1).sum(dim=-1)
-            mask_kl_sum += mask_kl.mean()
+            mask_kl_sum += mask_kl
 
             recs[:, s] = x_rec.detach()
 
-        return mse_sum, kl_sum, mask_kl_sum, recs
+        return mse_sum.mean(), kl_sum.mean(), mask_kl_sum.mean(), recs
