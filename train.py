@@ -17,6 +17,7 @@ add_observers(ex)
 @ex.config
 def config():
     dataset = 'circles'
+    num_slots = 5
     beta = 2.0
     gamma = 0.25
     lr = 1e-4
@@ -24,7 +25,7 @@ def config():
 
 
 @ex.automain
-def train(dataset, beta, gamma, lr, steps, _run, _log):
+def train(dataset, num_slots, beta, gamma, lr, steps, _run, _log):
     if len(_run.observers) == 0:
         _log.warning('Running without observers')
 
@@ -33,19 +34,19 @@ def train(dataset, beta, gamma, lr, steps, _run, _log):
     loader = DataLoader(data, batch_size=16, shuffle=True, num_workers=1)
     iterator = make_data_iterator(loader)
 
-    model = MONet(im_size=64, steps=5)
+    model = MONet(im_size=64, im_channels=3, num_slots=num_slots)
 
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr)
 
     log_every = 1
-    save_every = 20000
+    save_every = 20
     metrics = defaultdict(float)
 
     for step in range(1, steps + 1):
         # Train
         batch = next(iterator).to(device)
-        mse, kl, mask_kl = model(batch)
+        mse, kl, mask_kl, out = model(batch)
         loss = mse + beta * kl + gamma * mask_kl
         optimizer.zero_grad()
         loss.backward()
@@ -67,9 +68,11 @@ def train(dataset, beta, gamma, lr, steps, _run, _log):
             _log.info(log)
 
         # Save
-        # if step % save_every == 0:
-        #     plot_examples(batch.cpu(), f'original_{step:d}')
-        #     plot_examples(out.cpu().detach(), f'reconstruction_{step:d}')
+        if step % save_every == 0:
+            plot_examples(batch.cpu(), f'original_{step:d}')
+            out = out.reshape(-1, 3, 64, 64)
+            plot_examples(out.cpu(), f'reconstruction_{step:d}',
+                          num_cols=num_slots)
 
     model_file = f'{model}_{dataset}.pt'
     torch.save(model.state_dict(), model_file)
