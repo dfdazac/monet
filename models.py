@@ -231,25 +231,28 @@ class AttentionNetwork(nn.Module):
 
 
 class MONet(nn.Module):
-    def __init__(self, im_size, steps):
+    def __init__(self, im_size, im_channels, num_slots):
         super(MONet, self).__init__()
 
-        self.component_vae = VAE(im_size, in_channels=4)
+        self.component_vae = VAE(im_size, in_channels=im_channels + 1)
         self.attention = AttentionNetwork()
-        self.steps = steps
+        self.num_slots = num_slots
+        self.im_channels = im_channels
 
-        init_scope = torch.zeros((im_size, im_size))
-        init_scope = init_scope.view((1, 1) + init_scope.shape)
+        init_scope = torch.zeros((1, 1, im_size, im_size))
         self.register_buffer('init_scope', init_scope)
+        recs = torch.zeros((1, num_slots, im_channels, im_size, im_size))
+        self.register_buffer('recs', recs)
 
     def forward(self, x):
         batch_size = x.shape[0]
         log_scope = self.init_scope.expand(batch_size, -1, -1, -1)
+        recs = self.recs.expand(batch_size, -1, -1, -1, -1)
 
         mse_sum = kl_sum = mask_kl_sum = 0.0
 
-        for s in range(self.steps):
-            if s < self.steps - 1:
+        for s in range(self.num_slots):
+            if s < self.num_slots - 1:
                 log_mask, log_scope = self.attention(x, log_scope)
             else:
                 log_mask = log_scope
@@ -258,7 +261,7 @@ class MONet(nn.Module):
             mu, logvar, vae_out = self.component_vae(vae_in)
 
             # Reconstructions
-            x_rec, log_mask_rec = torch.split(vae_out, 3, dim=1)
+            x_rec, log_mask_rec = torch.split(vae_out, self.im_channels, dim=1)
             log_mask_rec = F.logsigmoid(log_mask_rec)
 
             # Masked component reconstruction log-loss
@@ -272,8 +275,12 @@ class MONet(nn.Module):
             kl_sum += kl.mean()
 
             # KL divergence between mask and reconstruction distributions
-            mask_kl = F.kl_div(log_mask_rec, torch.exp(log_mask),
-                               reduction='batchmean')
-            mask_kl_sum += mask_kl
+            mask_p = Bernoulli(logits=log_mask)
+            mask_q = Bernoulli(logits=log_mask_rec)
+            mask_kl = kl_divergence(mask_p, mask_q).view(batch_size,
+                                                         -1).sum(dim=-1)
+            mask_kl_sum += mask_kl.mean()
 
-        return mse_sum, kl_sum, mask_kl_sum
+            recs[:, s] = x_rec.detach()
+
+        return mse_sum, kl_sum, mask_kl_sum, recs
