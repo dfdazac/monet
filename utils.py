@@ -28,9 +28,9 @@ train_ingredient = Ingredient('utils')
 
 
 @train_ingredient.capture
-def plot_examples(examples, name, _run=None):
+def plot_examples(examples, name, num_cols=8, _run=None):
     clipped = torch.clamp(examples.detach(), 0, 1)
-    image = make_grid(clipped, pad_value=1)
+    image = make_grid(clipped, nrow=num_cols, pad_value=1)
     plt.cla()
     plt.imshow(image.permute(1, 2, 0))
     plt.axis('off')
