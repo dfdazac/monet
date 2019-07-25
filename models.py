@@ -218,9 +218,9 @@ class AttentionNetwork(nn.Module):
         - Output: :math:`(N, 1, H_{out}, W_{out})` (mask),
                   :math:`(N, 1, H_{out}, W_{out})` (next scope)
     """
-    def __init__(self):
+    def __init__(self, in_channels):
         super(AttentionNetwork, self).__init__()
-        self.unet = UNet(in_channels=4, out_channels=1)
+        self.unet = UNet(in_channels, out_channels=1)
 
     def forward(self, x, scope):
         x = torch.cat((scope, x), dim=1)
@@ -235,7 +235,7 @@ class MONet(nn.Module):
         super(MONet, self).__init__()
 
         self.component_vae = VAE(im_size, in_channels=im_channels + 1)
-        self.attention = AttentionNetwork()
+        self.attention = AttentionNetwork(in_channels=im_channels + 1)
         self.num_slots = num_slots
         self.im_channels = im_channels
 
