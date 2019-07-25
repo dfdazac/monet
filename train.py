@@ -49,7 +49,7 @@ def train(dataset, num_slots, beta, gamma, lr, steps, _run, _log):
     for step in range(1, steps + 1):
         # Train
         batch = next(iterator).to(device)[:, 0:1]
-        mse, kl, mask_kl, recs, masks = model(batch)
+        mse, kl, mask_kl, recs, log_masks = model(batch)
         loss = mse + beta * kl + gamma * mask_kl
         optimizer.zero_grad()
         loss.backward()
@@ -72,11 +72,13 @@ def train(dataset, num_slots, beta, gamma, lr, steps, _run, _log):
 
         # Save
         if step % save_every == 0:
-            plot_examples(batch, f'original_{step:d}')
             recs = recs.reshape(-1, im_channels, 64, 64)
-            plot_examples(recs, f'reconstruction_{step:d}', num_cols=num_slots)
-            masks = torch.exp(masks.reshape(-1, 1, 64, 64))
-            plot_examples(masks, f'mask_{step:d}', num_cols=num_slots)
+            log_masks = torch.exp(log_masks).reshape(-1, 1, 64, 64)
+            num_cols = batch.shape[0]
+
+            plot_examples(batch, f'original_{step:d}')
+            plot_examples(recs, f'reconstruction_{step:d}', num_cols)
+            plot_examples(log_masks, f'mask_{step:d}', num_cols)
 
     model_file = f'monet_{dataset}.pt'
     torch.save(model.state_dict(), model_file)
