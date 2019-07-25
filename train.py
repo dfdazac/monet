@@ -5,14 +5,11 @@ import torch
 from torch.utils.data import TensorDataset, DataLoader
 
 from models import MONet
-from utils import (make_data_iterator, add_observers, train_ingredient,
-                   plot_examples)
+import utils
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-ex = sacred.Experiment(name='MONet', ingredients=[train_ingredient])
-add_observers(ex)
-
-# TODO: Train VAE with monochromatic dataset!
+ex = sacred.Experiment(name='MONet', ingredients=[utils.train_ingredient])
+utils.add_observers(ex)
 
 # noinspection PyUnusedLocal
 @ex.config
@@ -33,13 +30,10 @@ def train(dataset, num_slots, beta, gamma, lr, steps, _run, _log):
     train_file = os.path.join('data', dataset, 'data.pt')
     data = TensorDataset(torch.load(train_file))
     loader = DataLoader(data, batch_size=16, shuffle=True, num_workers=1)
-    iterator = make_data_iterator(loader)
-    # FIXME
-    im_channels = 1  # next(iter(loader))[0].shape[1]
+    iterator = utils.make_data_iterator(loader)
+    _, im_channels, im_size, _ = next(iter(loader))[0].shape
 
-    model = MONet(im_size=64, im_channels=im_channels, num_slots=num_slots)
-
-    model.to(device)
+    model = MONet(im_size, im_channels, num_slots).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr)
 
     log_every = 200
@@ -76,9 +70,9 @@ def train(dataset, num_slots, beta, gamma, lr, steps, _run, _log):
             log_masks = torch.exp(log_masks).reshape(-1, 1, 64, 64)
             num_cols = batch.shape[0]
 
-            plot_examples(batch, f'original_{step:d}')
-            plot_examples(recs, f'reconstruction_{step:d}', num_cols)
-            plot_examples(log_masks, f'mask_{step:d}', num_cols)
+            utils.plot_examples(batch, f'original_{step:d}', num_cols)
+            utils.plot_examples(recs, f'reconstruction_{step:d}', num_cols)
+            utils.plot_examples(log_masks, f'mask_{step:d}', num_cols)
 
     model_file = f'monet_{dataset}.pt'
     torch.save(model.state_dict(), model_file)

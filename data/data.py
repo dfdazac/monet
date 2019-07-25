@@ -14,7 +14,7 @@ ex = sacred.Experiment()
 @ex.config
 def config():
     dataset = 'circles'
-    num_samples = 64
+    num_samples = 50000
 
 
 IMG_SIZE = 64
