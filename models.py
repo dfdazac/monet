@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Bernoulli, kl_divergence
-from utils import plot_examples
 
 
 class VAE(nn.Module):
@@ -237,26 +236,26 @@ class MONet(nn.Module):
 
         self.component_vae = VAE(im_size, in_channels=im_channels + 1)
         self.attention = AttentionNetwork(in_channels=im_channels + 1)
-        self.num_slots = num_slots
+
+        self.im_size = im_size
         self.im_channels = im_channels
+        self.num_slots = num_slots
 
         init_scope = torch.zeros((1, 1, im_size, im_size))
         self.register_buffer('init_scope', init_scope)
-        recs = torch.zeros((1, num_slots, im_channels, im_size, im_size))
-        self.register_buffer('recs', recs)
-        masks = torch.zeros((1, num_slots, 1, im_size, im_size))
-        self.register_buffer('masks', masks)
 
     def forward(self, x):
         batch_size = x.shape[0]
         log_scope = self.init_scope.expand(batch_size, -1, -1, -1)
-        recs = self.recs.expand(batch_size, -1, -1, -1, -1)
-        masks = self.masks.expand(batch_size, -1, -1, -1, -1)
+        recs = torch.zeros(self.num_slots, batch_size, self.im_channels,
+                           self.im_size, self.im_size).to(x.device)
+        masks = torch.zeros(self.num_slots, batch_size, 1,
+                            self.im_size, self.im_size).to(x.device)
 
         mse_sum = kl_sum = mask_kl_sum = 0.0
 
-        for s in range(self.num_slots):
-            if s < self.num_slots - 1:
+        for slot in range(self.num_slots):
+            if slot < self.num_slots - 1:
                 log_mask, log_scope = self.attention(x, log_scope)
             else:
                 log_mask = log_scope
@@ -271,21 +270,20 @@ class MONet(nn.Module):
             # Masked component reconstruction log-loss
             rec_loss = 10 * F.mse_loss(x_rec, x, reduction='none') + log_mask
             rec_loss = torch.clamp_min(rec_loss, min=0)
-            rec_loss = rec_loss.view(batch_size, -1).sum(dim=-1)
-            mse_sum += rec_loss
+            rec_loss = rec_loss.view(batch_size, -1)
+            mse_sum += rec_loss.sum(dim=-1)
 
             # KL divergence with latent prior
-            kl = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum(dim=-1)
-            kl_sum += kl
+            kl = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
+            kl_sum += kl.sum(dim=-1)
 
             # KL divergence between mask and reconstruction distributions
             mask_p = Bernoulli(logits=log_mask)
             mask_q = Bernoulli(logits=log_mask_rec)
-            mask_kl = kl_divergence(mask_p, mask_q).view(batch_size,
-                                                         -1).sum(dim=-1)
-            mask_kl_sum += mask_kl
+            mask_kl = kl_divergence(mask_p, mask_q).view(batch_size, -1)
+            mask_kl_sum += mask_kl.sum(dim=-1)
 
-            recs[:, s] = x_rec.detach()
-            masks[:, s] = log_mask.detach()
+            recs[slot] = x_rec.detach()
+            masks[slot] = log_mask.detach()
 
         return mse_sum.mean(), kl_sum.mean(), mask_kl_sum.mean(), recs, masks
