@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Bernoulli, kl_divergence
+from utils import plot_examples
 
 
 class VAE(nn.Module):
@@ -243,11 +244,14 @@ class MONet(nn.Module):
         self.register_buffer('init_scope', init_scope)
         recs = torch.zeros((1, num_slots, im_channels, im_size, im_size))
         self.register_buffer('recs', recs)
+        masks = torch.zeros((1, num_slots, 1, im_size, im_size))
+        self.register_buffer('masks', masks)
 
     def forward(self, x):
         batch_size = x.shape[0]
         log_scope = self.init_scope.expand(batch_size, -1, -1, -1)
         recs = self.recs.expand(batch_size, -1, -1, -1, -1)
+        masks = self.masks.expand(batch_size, -1, -1, -1, -1)
 
         mse_sum = kl_sum = mask_kl_sum = 0.0
 
@@ -282,5 +286,6 @@ class MONet(nn.Module):
             mask_kl_sum += mask_kl
 
             recs[:, s] = x_rec.detach()
+            masks[:, s] = log_mask.detach()
 
-        return mse_sum.mean(), kl_sum.mean(), mask_kl_sum.mean(), recs
+        return mse_sum.mean(), kl_sum.mean(), mask_kl_sum.mean(), recs, masks

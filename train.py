@@ -12,13 +12,14 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 ex = sacred.Experiment(name='MONet', ingredients=[train_ingredient])
 add_observers(ex)
 
+# TODO: Train VAE with monochromatic dataset!
 
 # noinspection PyUnusedLocal
 @ex.config
 def config():
     dataset = 'circles'
     num_slots = 5
-    beta = 2.0
+    beta = 0.5
     gamma = 0.25
     lr = 1e-4
     steps = 200000
@@ -33,20 +34,22 @@ def train(dataset, num_slots, beta, gamma, lr, steps, _run, _log):
     data = TensorDataset(torch.load(train_file))
     loader = DataLoader(data, batch_size=16, shuffle=True, num_workers=1)
     iterator = make_data_iterator(loader)
+    # FIXME
+    im_channels = 1  # next(iter(loader))[0].shape[1]
 
-    model = MONet(im_size=64, im_channels=3, num_slots=num_slots)
+    model = MONet(im_size=64, im_channels=im_channels, num_slots=num_slots)
 
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr)
 
-    log_every = 1
-    save_every = 20
+    log_every = 200
+    save_every = 1000
     metrics = defaultdict(float)
 
     for step in range(1, steps + 1):
         # Train
-        batch = next(iterator).to(device)
-        mse, kl, mask_kl, out = model(batch)
+        batch = next(iterator).to(device)[:, 0:1]
+        mse, kl, mask_kl, recs, masks = model(batch)
         loss = mse + beta * kl + gamma * mask_kl
         optimizer.zero_grad()
         loss.backward()
@@ -62,19 +65,20 @@ def train(dataset, num_slots, beta, gamma, lr, steps, _run, _log):
             for m in metrics:
                 metrics[m] /= log_every
                 log += f'{m}: {metrics[m]:.6f} '
-                _run.log_scalar(m, metrics[m])
+                _run.log_scalar(m, metrics[m], step)
                 metrics[m] = 0.0
 
             _log.info(log)
 
         # Save
         if step % save_every == 0:
-            plot_examples(batch.cpu(), f'original_{step:d}')
-            out = out.reshape(-1, 3, 64, 64)
-            plot_examples(out.cpu(), f'reconstruction_{step:d}',
-                          num_cols=num_slots)
+            plot_examples(batch, f'original_{step:d}')
+            recs = recs.reshape(-1, im_channels, 64, 64)
+            plot_examples(recs, f'reconstruction_{step:d}', num_cols=num_slots)
+            masks = torch.exp(masks.reshape(-1, 1, 64, 64))
+            plot_examples(masks, f'mask_{step:d}', num_cols=num_slots)
 
-    model_file = f'{model}_{dataset}.pt'
+    model_file = f'monet_{dataset}.pt'
     torch.save(model.state_dict(), model_file)
     _run.add_artifact(model_file)
     os.remove(model_file)
