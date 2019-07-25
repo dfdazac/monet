@@ -28,9 +28,12 @@ train_ingredient = Ingredient('utils')
 
 
 @train_ingredient.capture
-def plot_examples(examples, name, num_cols=8, _run=None):
-    clipped = torch.clamp(examples.detach(), 0, 1)
+def plot_examples(examples, name=None, num_cols=8, _run=None):
+    clipped = torch.clamp(examples.detach().cpu(), 0, 1)
     image = make_grid(clipped, nrow=num_cols, pad_value=1)
+    c, h, w = image.shape
+    fig = plt.gcf()
+    fig.set_size_inches(0.01 * w, 0.01 * h)
     plt.cla()
     plt.imshow(image.permute(1, 2, 0))
     plt.axis('off')
