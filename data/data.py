@@ -114,7 +114,7 @@ def generate_sprites(img_size, num_samples, filename):
 
 
 def generate_dataset(name, num_samples, num_sprites, shapes, colors, bg_color,
-                     size=None):
+                     num_channels=3, size=None):
     """Generate a dataset of images and save it to disk.
         The saved tensor has shape (num_samples, 3, img_size, img_size).
 
@@ -125,19 +125,20 @@ def generate_dataset(name, num_samples, num_sprites, shapes, colors, bg_color,
             shapes (list): shapes (str) to choose from
             colors (list): colors (rgb tuple) to choose from
             bg_color (tuple): rgb color for the background
+            num_channels (int): number of color channels in the dataset
             size (int): sprite size. If None, each sprite has a random size.
                 Default: None
     """
     print('Generating dataset...')
     np.random.seed(0)
-    data = torch.empty([num_samples, 3, IMG_SIZE, IMG_SIZE],
+    data = torch.empty([num_samples, num_channels, IMG_SIZE, IMG_SIZE],
                        dtype=torch.float32)
     for i in range(num_samples):
         data[i] = generate_random_img(IMG_SIZE, num_sprites,
                                       shapes,
                                       colors,
                                       bg_color,
-                                      size)
+                                      size)[0:num_channels]
 
     path = osp.join(name, 'data.pt')
     torch.save(data, path)
@@ -153,7 +154,8 @@ def generate_circles(num_samples):
         num_samples (int): number of samples
     """
     generate_dataset('circles', num_samples, num_sprites=1, shapes=['ellipse'],
-                     colors=[(255, 255, 255)], bg_color=(0, 0, 0), size=10)
+                     colors=[(255, 255, 255)], bg_color=(0, 0, 0),
+                     num_channels=1, size=10)
 
 
 @ex.command(unobserved=True)
