@@ -28,7 +28,7 @@ train_ingredient = Ingredient('utils')
 
 
 @train_ingredient.capture
-def plot_examples(examples, name=None, num_cols=8, _run=None):
+def plot_examples(examples, name, num_cols=8, _run=None):
     clipped = torch.clamp(examples.detach().cpu(), 0, 1)
     image = make_grid(clipped, nrow=num_cols, pad_value=1)
     c, h, w = image.shape
