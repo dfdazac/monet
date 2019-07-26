@@ -16,6 +16,7 @@ utils.add_observers(ex)
 def config():
     dataset = 'circles'
     num_slots = 5
+    z_dim = 10
     beta = 0.5
     gamma = 0.25
     lr = 1e-4
@@ -23,7 +24,7 @@ def config():
 
 
 @ex.automain
-def train(dataset, num_slots, beta, gamma, lr, steps, _run, _log):
+def train(dataset, num_slots, z_dim, beta, gamma, lr, steps, _run, _log):
     if len(_run.observers) == 0:
         _log.warning('Running without observers')
 
@@ -33,7 +34,7 @@ def train(dataset, num_slots, beta, gamma, lr, steps, _run, _log):
     iterator = utils.make_data_iterator(loader)
     _, im_channels, im_size, _ = next(iter(loader))[0].shape
 
-    model = MONet(im_size, im_channels, num_slots).to(device)
+    model = MONet(im_size, im_channels, num_slots, z_dim).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr)
 
     log_every = 200

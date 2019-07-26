@@ -12,7 +12,7 @@ class VAE(nn.Module):
         - Input: :math:`(N, C_{in}, H_{in}, W_{in})`
         - Output: :math:`(N, C_{in}, H_{in}, W_{in})`
     """
-    def __init__(self, im_size, in_channels, decoder='sbd'):
+    def __init__(self, im_size, in_channels, z_dim, decoder='sbd'):
         super(VAE, self).__init__()
 
         enc_convs = [nn.Conv2d(in_channels, out_channels=64,
@@ -24,10 +24,11 @@ class VAE(nn.Module):
 
         self.fc = nn.Sequential(nn.Linear(in_features=1024, out_features=256),
                                 nn.ReLU(),
-                                nn.Linear(in_features=256, out_features=20))
+                                nn.Linear(in_features=256,
+                                          out_features=2 * z_dim))
 
         if decoder == 'deconv':
-            self.dec_linear = nn.Linear(in_features=10, out_features=256)
+            self.dec_linear = nn.Linear(in_features=z_dim, out_features=256)
             dec_convs = [nn.ConvTranspose2d(in_channels=64, out_channels=64,
                                             kernel_size=4, stride=2, padding=1)
                          for i in range(4)]
@@ -48,7 +49,7 @@ class VAE(nn.Module):
             self.register_buffer('x_grid', x_grid.view((1, 1) + x_grid.shape))
             self.register_buffer('y_grid', y_grid.view((1, 1) + y_grid.shape))
 
-            dec_convs = [nn.Conv2d(in_channels=12, out_channels=64,
+            dec_convs = [nn.Conv2d(in_channels=z_dim + 2, out_channels=64,
                                    kernel_size=3, padding=1),
                          nn.Conv2d(in_channels=64, out_channels=64,
                                    kernel_size=3, padding=1)]
@@ -231,10 +232,10 @@ class AttentionNetwork(nn.Module):
 
 
 class MONet(nn.Module):
-    def __init__(self, im_size, im_channels, num_slots):
+    def __init__(self, im_size, im_channels, num_slots, z_dim):
         super(MONet, self).__init__()
 
-        self.component_vae = VAE(im_size, in_channels=im_channels + 1)
+        self.component_vae = VAE(im_size, im_channels + 1, z_dim)
         self.attention = AttentionNetwork(in_channels=im_channels + 1)
 
         self.im_size = im_size
