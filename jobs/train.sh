@@ -18,4 +18,4 @@ cd $TMPDIR/$SRC_DIR
 
 # Run experiment
 source activate pytorch
-srun python -u train.py with dataset='circles-small' steps=10000
+srun python -u train.py with dataset='sprites_multi' steps=10000

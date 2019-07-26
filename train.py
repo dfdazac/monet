@@ -42,7 +42,7 @@ def train(dataset, num_slots, beta, gamma, lr, steps, _run, _log):
 
     for step in range(1, steps + 1):
         # Train
-        batch = next(iterator).to(device)[:, 0:1]
+        batch = next(iterator).to(device)
         mse, kl, mask_kl, recs, log_masks = model(batch)
         loss = mse + beta * kl + gamma * mask_kl
         optimizer.zero_grad()
