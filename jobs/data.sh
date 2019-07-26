@@ -3,14 +3,19 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=6
 #SBATCH --ntasks-per-node=1
-#SBATCH --time=00:05:00
+#SBATCH --time=00:10:00
 #SBATCH --mem=10000M
 #SBATCH --partition=gpu_shared
 
+#SRC_DIR=monet
+#DATA_DIR=data
+#DATASET=circles
+#SAMPLES=50000
+
 SRC_DIR=monet
 DATA_DIR=data
-DATASET=circles
-SAMPLES=50000
+DATASET=sprites_multi
+SAMPLES=100000
 
 # Copy data to scratch
 cp -r $HOME/$SRC_DIR/$DATA_DIR $TMPDIR

@@ -95,25 +95,7 @@ def generate_random_img(img_size, num_sprites, shapes, colors, bg_color,
     return img_tensor
 
 
-def generate_sprites(img_size, num_samples, filename):
-    """Generate samples of images with sprites and save tensor to disk.
-    The saved tensor has shape (num_samples, 3, img_size, img_size).
-
-    Args:
-        img_size (int): side length of the image
-        num_samples (int): number of samples
-        filename (str): name of file to save the data
-    """
-    data = torch.empty([num_samples, 3, img_size, img_size],
-                       dtype=torch.float32)
-    for i in range(num_samples):
-        sample = np.array(generate_random_img(img_size)).transpose((2, 0, 1)) / 255.0
-        data[i] = torch.tensor(sample, dtype=torch.float32)
-
-    torch.save(data, osp.join('data/', filename))
-
-
-def generate_dataset(name, num_samples, num_sprites, shapes, colors, bg_color,
+def generate_dataset(name, num_samples, max_sprites, shapes, colors, bg_color,
                      num_channels=3, size=None):
     """Generate a dataset of images and save it to disk.
         The saved tensor has shape (num_samples, 3, img_size, img_size).
@@ -121,7 +103,9 @@ def generate_dataset(name, num_samples, num_sprites, shapes, colors, bg_color,
         Args:
             name (str): name of the folder where tensor will be stored
             num_samples (int): number of samples
-            num_sprites (int): number of sprites to draw
+            max_sprites (int): Maximum number of sprites to draw. For each
+                image, the actual number is randomly sampled in
+                [1, max_sprites]
             shapes (list): shapes (str) to choose from
             colors (list): colors (rgb tuple) to choose from
             bg_color (tuple): rgb color for the background
@@ -133,7 +117,9 @@ def generate_dataset(name, num_samples, num_sprites, shapes, colors, bg_color,
     np.random.seed(0)
     data = torch.empty([num_samples, num_channels, IMG_SIZE, IMG_SIZE],
                        dtype=torch.float32)
+
     for i in range(num_samples):
+        num_sprites = np.random.randint(low=1, high=max_sprites + 1)
         data[i] = generate_random_img(IMG_SIZE, num_sprites,
                                       shapes,
                                       colors,
@@ -153,13 +139,13 @@ def generate_circles(num_samples):
     Args:
         num_samples (int): number of samples
     """
-    generate_dataset('circles', num_samples, num_sprites=1, shapes=['ellipse'],
+    generate_dataset('circles', num_samples, max_sprites=1, shapes=['ellipse'],
                      colors=[(255, 255, 255)], bg_color=(0, 0, 0),
                      num_channels=1, size=10)
 
 
 @ex.command(unobserved=True)
-def generate_sprites(num_samples):
+def generate_sprites_single(num_samples):
     """Generate samples of images with circles and save tensor to disk.
     The saved tensor has shape (num_samples, 3, img_size, img_size).
 
@@ -174,8 +160,28 @@ def generate_sprites(num_samples):
               (0, 150, 150)]
 
     shapes = ['ellipse', 'rectangle', 'polygon']
-    generate_dataset('sprites', num_samples, num_sprites=1, shapes=shapes,
+    generate_dataset('sprites', num_samples, max_sprites=1, shapes=shapes,
                      colors=colors, bg_color=(255, 255, 255))
+
+
+@ex.command(unobserved=True)
+def generate_sprites_multi(num_samples):
+    """Generate samples of images with circles and save tensor to disk.
+    The saved tensor has shape (num_samples, 3, img_size, img_size).
+
+    Args:
+        num_samples (int): number of samples
+    """
+    colors = [(0, 0, 210),
+              (0, 210, 0),
+              (210, 0, 0),
+              (150, 150, 0),
+              (150, 0, 150),
+              (0, 150, 150)]
+
+    shapes = ['ellipse', 'rectangle', 'polygon']
+    generate_dataset('sprites_multi', num_samples, max_sprites=3,
+                     shapes=shapes, colors=colors, bg_color=(255, 255, 255))
 
 
 @ex.command(unobserved=True)
@@ -183,6 +189,7 @@ def show_samples(dataset, num_samples):
     dataset = torch.load(osp.join(dataset, 'data.pt'))
     grid = make_grid(dataset[:num_samples]).permute(1, 2, 0)
     plt.imshow(grid)
+    plt.axis('off')
     plt.show()
 
 
