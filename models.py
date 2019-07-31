@@ -287,4 +287,11 @@ class MONet(nn.Module):
             recs[slot] = x_rec.detach()
             masks[slot] = log_mask.detach()
 
-        return mse_sum.mean(), kl_sum.mean(), mask_kl_sum.mean(), recs, masks
+        r1 = torch.log(torch.tensor(-1.0)) # mse_sum.mean()
+        assert not torch.isnan(r1), 'nan in mse'
+        r2 = kl_sum.mean()
+        assert not torch.isnan(r2), 'nan in kl'
+        r3 = mask_kl_sum.mean()
+        assert not torch.isnan(r3), 'nan in mask kl'
+
+        return r1, r2, r3, recs, masks

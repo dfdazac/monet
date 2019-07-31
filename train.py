@@ -3,9 +3,15 @@ from collections import defaultdict
 import sacred
 import torch
 from torch.utils.data import TensorDataset, DataLoader
+from sacred.utils import SacredInterrupt
 
 from models import MONet
 import utils
+
+
+class TrainingFailed(SacredInterrupt):
+    STATUS = 'TRAIN_FAILED'
+
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 ex = sacred.Experiment(name='MONet', ingredients=[utils.train_ingredient])
@@ -37,46 +43,61 @@ def train(dataset, num_slots, z_dim, beta, gamma, lr, steps, _run, _log):
     model = MONet(im_size, im_channels, num_slots, z_dim).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr)
 
-    log_every = 200
-    save_every = 1000
+    log_every = 500
+    save_every = 10000
     metrics = defaultdict(float)
+    successful = True
 
-    for step in range(1, steps + 1):
-        # Train
-        batch = next(iterator).to(device)
-        mse, kl, mask_kl, recs, log_masks = model(batch)
-        loss = mse + beta * kl + gamma * mask_kl
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+    try:
+        for step in range(1, steps + 1):
+            # Train
+            batch = next(iterator).to(device)
+            mse, kl, mask_kl, recs, log_masks = model(batch)
+            loss = mse + beta * kl + gamma * mask_kl
+            optimizer.zero_grad()
+            loss.backward()
 
-        # Log
-        metrics['mse'] += mse.item()
-        metrics['kl'] += kl.item()
-        metrics['mask_kl'] += mask_kl.item()
-        metrics['loss'] += loss.item()
-        if step % log_every == 0:
-            log = f'[{step:d}/{steps:d}] '
-            for m in metrics:
-                metrics[m] /= log_every
-                log += f'{m}: {metrics[m]:.6f} '
-                _run.log_scalar(m, metrics[m], step)
-                metrics[m] = 0.0
+            max_grad = torch.tensor(0.0)
+            for param in model.parameters():
+                grad = torch.max(param.grad)
+                max_grad = torch.max(max_grad, grad)
 
-            _log.info(log)
+            optimizer.step()
 
-        # Save
-        if step % save_every == 0:
-            recs = recs.reshape(-1, im_channels, 64, 64)
-            log_masks = torch.exp(log_masks).reshape(-1, 1, 64, 64)
-            num_cols = batch.shape[0]
+            # Log
+            metrics['mse'] += mse.item()
+            metrics['kl'] += kl.item()
+            metrics['mask_kl'] += mask_kl.item()
+            metrics['loss'] += loss.item()
+            metrics['max_grad'] += max_grad.item()
+            if step % log_every == 0:
+                log = f'[{step:d}/{steps:d}] '
+                for m in metrics:
+                    metrics[m] /= log_every
+                    log += f'{m}: {metrics[m]:.6f} '
+                    _run.log_scalar(m, metrics[m], step)
+                    metrics[m] = 0.0
 
-            utils.plot_examples(batch, f'original_{step:d}', num_cols)
-            utils.plot_examples(recs, f'reconstruction_{step:d}', num_cols)
-            utils.plot_examples(log_masks, f'mask_{step:d}', num_cols)
+                _log.info(log)
+
+            # Save
+            if step % save_every == 0:
+                recs = recs.reshape(-1, im_channels, 64, 64)
+                log_masks = torch.exp(log_masks).reshape(-1, 1, 64, 64)
+                num_cols = batch.shape[0]
+
+                utils.plot_examples(batch, f'original_{step:d}', num_cols)
+                utils.plot_examples(recs, f'reconstruction_{step:d}', num_cols)
+                utils.plot_examples(log_masks, f'mask_{step:d}', num_cols)
+
+    except AssertionError as assertion:
+        print(assertion)
+        successful = False
 
     model_file = f'monet_{dataset}.pt'
     torch.save(model.state_dict(), model_file)
     _run.add_artifact(model_file)
     os.remove(model_file)
 
+    if not successful:
+        raise TrainingFailed()
