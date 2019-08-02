@@ -231,6 +231,10 @@ class AttentionNetwork(nn.Module):
         return mask, scope
 
 
+def clamp_logprobs(logprobs):
+    return torch.clamp(logprobs.exp(), min=1e-9, max=1 - 1e-9)
+
+
 class MONet(nn.Module):
     def __init__(self, im_size, im_channels, num_slots, z_dim):
         super(MONet, self).__init__()
@@ -279,8 +283,8 @@ class MONet(nn.Module):
             kl_sum += kl.sum(dim=-1)
 
             # KL divergence between mask and reconstruction distributions
-            mask_p = Bernoulli(probs=log_mask.exp())
-            mask_q = Bernoulli(probs=log_mask_rec.exp())
+            mask_p = Bernoulli(probs=clamp_logprobs(log_mask))
+            mask_q = Bernoulli(probs=clamp_logprobs(log_mask_rec))
             mask_kl = kl_divergence(mask_p, mask_q).view(batch_size, -1)
             mask_kl_sum += mask_kl.sum(dim=-1)
 

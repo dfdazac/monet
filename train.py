@@ -42,12 +42,12 @@ def train(dataset, num_slots, z_dim, beta, gamma, lr, steps, _run, _log):
 
     model = MONet(im_size, im_channels, num_slots, z_dim).to(device)
 
-    # model.load_state_dict(torch.load('monet_sprites_multi.pt', map_location='cpu'))
-    # batch = torch.load('bad_batch.pt')
+    model.load_state_dict(torch.load('monet_sprites_multi.pt', map_location='cpu'))
+    batch = torch.load('bad_batch.pt')
 
     optimizer = torch.optim.Adam(model.parameters(), lr)
 
-    log_every = 500
+    log_every = 1
     save_every = 10000
     metrics = defaultdict(float)
     successful = True
@@ -55,7 +55,7 @@ def train(dataset, num_slots, z_dim, beta, gamma, lr, steps, _run, _log):
     try:
         for step in range(1, steps + 1):
             # Train
-            batch = next(iterator).to(device)
+            # batch = next(iterator).to(device)
 
             with torch.autograd.detect_anomaly():
                 mse, kl, mask_kl, recs, log_masks = model(batch)
@@ -97,13 +97,13 @@ def train(dataset, num_slots, z_dim, beta, gamma, lr, steps, _run, _log):
                 utils.plot_examples(recs, f'reconstruction_{step:d}', num_cols)
                 utils.plot_examples(log_masks, f'mask_{step:d}', num_cols)
 
-    except (AssertionError, RuntimeError) as error:
+    except AssertionError as error:
         _log.error(error)
         successful = False
         batch_file = 'bad_batch.pt'
         torch.save(batch.cpu(), batch_file)
         _run.add_artifact(batch_file)
-        os.remove(batch_file)
+        # os.remove(batch_file)
 
     model_file = f'monet_{dataset}.pt'
     torch.save(model.state_dict(), model_file)
