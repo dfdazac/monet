@@ -22,7 +22,7 @@ utils.add_observers(ex)
 def config():
     dataset = 'circles'
     num_slots = 5
-    z_dim = 10
+    z_dim = 16
     beta = 0.5
     gamma = 0.25
     lr = 1e-4
@@ -41,6 +41,10 @@ def train(dataset, num_slots, z_dim, beta, gamma, lr, steps, _run, _log):
     _, im_channels, im_size, _ = next(iter(loader))[0].shape
 
     model = MONet(im_size, im_channels, num_slots, z_dim).to(device)
+
+    # model.load_state_dict(torch.load('monet_sprites_multi.pt', map_location='cpu'))
+    # batch = torch.load('bad_batch.pt')
+
     optimizer = torch.optim.Adam(model.parameters(), lr)
 
     log_every = 500
@@ -52,15 +56,18 @@ def train(dataset, num_slots, z_dim, beta, gamma, lr, steps, _run, _log):
         for step in range(1, steps + 1):
             # Train
             batch = next(iterator).to(device)
-            mse, kl, mask_kl, recs, log_masks = model(batch)
-            loss = mse + beta * kl + gamma * mask_kl
-            optimizer.zero_grad()
-            loss.backward()
 
-            max_grad = torch.tensor(0.0)
+            with torch.autograd.detect_anomaly():
+                mse, kl, mask_kl, recs, log_masks = model(batch)
+                loss = mse + beta * kl + gamma * mask_kl
+                optimizer.zero_grad()
+                loss.backward()
+
+            max_grad = torch.tensor(0.0).to(device)
             for param in model.parameters():
                 grad = torch.max(param.grad)
                 max_grad = torch.max(max_grad, grad)
+                assert not torch.isnan(max_grad), 'nan in grad'
 
             optimizer.step()
 
@@ -90,9 +97,13 @@ def train(dataset, num_slots, z_dim, beta, gamma, lr, steps, _run, _log):
                 utils.plot_examples(recs, f'reconstruction_{step:d}', num_cols)
                 utils.plot_examples(log_masks, f'mask_{step:d}', num_cols)
 
-    except AssertionError as assertion:
-        print(assertion)
+    except (AssertionError, RuntimeError) as error:
+        _log.error(error)
         successful = False
+        batch_file = 'bad_batch.pt'
+        torch.save(batch.cpu(), batch_file)
+        _run.add_artifact(batch_file)
+        os.remove(batch_file)
 
     model_file = f'monet_{dataset}.pt'
     torch.save(model.state_dict(), model_file)

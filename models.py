@@ -279,15 +279,15 @@ class MONet(nn.Module):
             kl_sum += kl.sum(dim=-1)
 
             # KL divergence between mask and reconstruction distributions
-            mask_p = Bernoulli(logits=log_mask)
-            mask_q = Bernoulli(logits=log_mask_rec)
+            mask_p = Bernoulli(probs=log_mask.exp())
+            mask_q = Bernoulli(probs=log_mask_rec.exp())
             mask_kl = kl_divergence(mask_p, mask_q).view(batch_size, -1)
             mask_kl_sum += mask_kl.sum(dim=-1)
 
             recs[slot] = x_rec.detach()
             masks[slot] = log_mask.detach()
 
-        r1 = torch.log(torch.tensor(-1.0)) # mse_sum.mean()
+        r1 = mse_sum.mean()
         assert not torch.isnan(r1), 'nan in mse'
         r2 = kl_sum.mean()
         assert not torch.isnan(r2), 'nan in kl'
