@@ -246,7 +246,7 @@ class MONet(nn.Module):
         self.im_channels = im_channels
         self.num_slots = num_slots
 
-        init_scope = torch.empty((1, 1, im_size, im_size)).fill_(-1e-6)
+        init_scope = torch.zeros((1, 1, im_size, im_size))
         self.register_buffer('init_scope', init_scope)
 
     def forward(self, x):

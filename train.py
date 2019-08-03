@@ -36,18 +36,19 @@ def train(dataset, num_slots, z_dim, beta, gamma, lr, steps, _run, _log):
 
     train_file = os.path.join('data', dataset, 'data.pt')
     data = TensorDataset(torch.load(train_file))
-    loader = DataLoader(data, batch_size=16, shuffle=True, num_workers=1)
+    loader = DataLoader(data, batch_size=16, shuffle=True, num_workers=1,
+                        drop_last=True)
     iterator = utils.make_data_iterator(loader)
     _, im_channels, im_size, _ = next(iter(loader))[0].shape
 
     model = MONet(im_size, im_channels, num_slots, z_dim).to(device)
 
-    model.load_state_dict(torch.load('monet_sprites_multi.pt', map_location='cpu'))
-    batch = torch.load('bad_batch.pt')
+    # model.load_state_dict(torch.load('monet_sprites_multi.pt', map_location='cpu'))
+    # batch = torch.load('bad_batch.pt')
 
     optimizer = torch.optim.Adam(model.parameters(), lr)
 
-    log_every = 1
+    log_every = 500
     save_every = 10000
     metrics = defaultdict(float)
     successful = True
@@ -55,13 +56,13 @@ def train(dataset, num_slots, z_dim, beta, gamma, lr, steps, _run, _log):
     try:
         for step in range(1, steps + 1):
             # Train
-            # batch = next(iterator).to(device)
+            batch = next(iterator).to(device)
 
-            with torch.autograd.detect_anomaly():
-                mse, kl, mask_kl, recs, log_masks = model(batch)
-                loss = mse + beta * kl + gamma * mask_kl
-                optimizer.zero_grad()
-                loss.backward()
+            # with torch.autograd.detect_anomaly():
+            mse, kl, mask_kl, recs, log_masks = model(batch)
+            loss = mse + beta * kl + gamma * mask_kl
+            optimizer.zero_grad()
+            loss.backward()
 
             max_grad = torch.tensor(0.0).to(device)
             for param in model.parameters():
@@ -103,7 +104,7 @@ def train(dataset, num_slots, z_dim, beta, gamma, lr, steps, _run, _log):
         batch_file = 'bad_batch.pt'
         torch.save(batch.cpu(), batch_file)
         _run.add_artifact(batch_file)
-        # os.remove(batch_file)
+        os.remove(batch_file)
 
     model_file = f'monet_{dataset}.pt'
     torch.save(model.state_dict(), model_file)
