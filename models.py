@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.distributions import Bernoulli, kl_divergence
+from torch.distributions import Normal, Bernoulli, kl_divergence
 
 
 class VAE(nn.Module):
@@ -231,7 +231,7 @@ class AttentionNetwork(nn.Module):
         return mask, scope
 
 
-def clamp_logprobs(logprobs):
+def clamp_probs(logprobs):
     return torch.clamp(logprobs.exp(), min=1e-9, max=1 - 1e-9)
 
 
@@ -248,16 +248,21 @@ class MONet(nn.Module):
 
         init_scope = torch.zeros((1, 1, im_size, im_size))
         self.register_buffer('init_scope', init_scope)
+        scale = torch.empty((1, 1, 1, 1)).fill_(0.05 ** 0.5)
+        self.register_buffer('scale', scale)
 
     def forward(self, x):
         batch_size = x.shape[0]
         log_scope = self.init_scope.expand(batch_size, -1, -1, -1)
-        recs = torch.zeros(self.num_slots, batch_size, self.im_channels,
-                           self.im_size, self.im_size).to(x.device)
-        masks = torch.zeros(self.num_slots, batch_size, 1,
-                            self.im_size, self.im_size).to(x.device)
+        scale = self.scale.expand_as(x)
 
-        mse_sum = kl_sum = mask_kl_sum = 0.0
+        recs = torch.empty(self.num_slots, batch_size, self.im_channels,
+                           self.im_size, self.im_size).to(x.device)
+        masks = torch.empty(self.num_slots, batch_size, 1,
+                            self.im_size, self.im_size).to(x.device)
+        logprobs = torch.empty(self.num_slots, batch_size).to(x.device)
+
+        kl_sum = mask_kl_sum = 0.0
 
         for slot in range(self.num_slots):
             if slot < self.num_slots - 1:
@@ -272,26 +277,27 @@ class MONet(nn.Module):
             x_rec, log_mask_rec = torch.split(vae_out, self.im_channels, dim=1)
             log_mask_rec = F.logsigmoid(log_mask_rec)
 
-            # Masked component reconstruction log-loss
-            rec_loss = 10 * F.mse_loss(x_rec, x, reduction='none') + log_mask
-            rec_loss = torch.clamp_min(rec_loss, min=0)
+            # Masked component reconstruction loss
+            rec_dist = Normal(x_rec, scale)
+            rec_loss = log_mask + rec_dist.log_prob(x)
             rec_loss = rec_loss.view(batch_size, -1)
-            mse_sum += rec_loss.sum(dim=-1)
+            rec_loss = rec_loss.sum(dim=-1)
+            logprobs[slot] = rec_loss
 
             # KL divergence with latent prior
             kl = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
             kl_sum += kl.sum(dim=-1)
 
             # KL divergence between mask and reconstruction distributions
-            mask_p = Bernoulli(probs=clamp_logprobs(log_mask))
-            mask_q = Bernoulli(probs=clamp_logprobs(log_mask_rec))
+            mask_p = Bernoulli(probs=clamp_probs(log_mask))
+            mask_q = Bernoulli(probs=clamp_probs(log_mask_rec))
             mask_kl = kl_divergence(mask_p, mask_q).view(batch_size, -1)
             mask_kl_sum += mask_kl.sum(dim=-1)
 
             recs[slot] = x_rec.detach()
             masks[slot] = log_mask.detach()
 
-        r1 = mse_sum.mean()
+        r1 = -torch.logsumexp(logprobs, dim=0).mean()
         assert not torch.isnan(r1), 'nan in mse'
         r2 = kl_sum.mean()
         assert not torch.isnan(r2), 'nan in kl'
