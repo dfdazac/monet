@@ -1,3 +1,4 @@
+import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -223,16 +224,16 @@ class AttentionNetwork(nn.Module):
         super(AttentionNetwork, self).__init__()
         self.unet = UNet(in_channels, out_channels=1)
 
-    def forward(self, x, scope):
-        x = torch.cat((scope, x), dim=1)
+    def forward(self, x, log_scope):
+        x = torch.cat((log_scope, x), dim=1)
         x = self.unet(x)
-        mask = scope + F.logsigmoid(x)
-        scope = scope + F.logsigmoid(-x)
-        return mask, scope
+        log_mask = log_scope + F.logsigmoid(x)
+        log_scope = log_scope + F.logsigmoid(-x)
+        return log_mask, log_scope
 
 
 def clamp_probs(logprobs):
-    return torch.clamp(logprobs.exp(), min=1e-9, max=1 - 1e-9)
+    return torch.clamp(logprobs.exp(), min=1e-6, max=1 - 1e-6)
 
 
 class MONet(nn.Module):
@@ -248,7 +249,7 @@ class MONet(nn.Module):
 
         init_scope = torch.zeros((1, 1, im_size, im_size))
         self.register_buffer('init_scope', init_scope)
-        scale = torch.empty((1, 1, 1, 1)).fill_(0.05 ** 0.5)
+        scale = torch.empty((1, 1, 1, 1)).fill_(0.1)
         self.register_buffer('scale', scale)
 
     def forward(self, x):
