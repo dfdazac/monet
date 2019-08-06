@@ -26,7 +26,7 @@ def config():
     beta = 0.5
     gamma = 0.5
     lr = 1e-4
-    batch_size = 64
+    batch_size = 16
     steps = 200000
 
 

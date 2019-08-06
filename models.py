@@ -280,8 +280,9 @@ class MONet(nn.Module):
             kl = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
             kl_sum += kl.sum(dim=-1)
 
-            recs[:, slot] = x_rec
-            masks[:, slot] = torch.clamp_min(log_mask.exp(), min=1e-9)
+            mask_probs = torch.clamp_min(log_mask.exp(), min=1e-9)
+            recs[:, slot] = x_rec * mask_probs
+            masks[:, slot] = mask_probs
             log_mask_recs[:, slot] = log_mask_rec
 
         rec_loss = -torch.logsumexp(logprobs, dim=1).sum() / batch_size
