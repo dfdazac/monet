@@ -232,10 +232,6 @@ class AttentionNetwork(nn.Module):
         return log_mask, log_scope
 
 
-def clamp_probs(logprobs):
-    return torch.clamp(logprobs.exp(), min=1e-6, max=1 - 1e-6)
-
-
 class MONet(nn.Module):
     def __init__(self, im_size, im_channels, num_slots, z_dim):
         super(MONet, self).__init__()
@@ -257,13 +253,14 @@ class MONet(nn.Module):
         log_scope = self.init_scope.expand(batch_size, -1, -1, -1)
         scale = self.scale.expand_as(x)
 
-        recs = torch.empty(self.num_slots, batch_size, self.im_channels,
-                           self.im_size, self.im_size).to(x.device)
-        masks = torch.empty(self.num_slots, batch_size, 1,
+        logprobs = torch.empty(batch_size, self.num_slots, self.im_channels,
+                               self.im_size, self.im_size).to(x.device)
+        recs = torch.empty_like(logprobs)
+        masks = torch.empty(batch_size, self.num_slots, 1,
                             self.im_size, self.im_size).to(x.device)
-        logprobs = torch.empty(self.num_slots, batch_size).to(x.device)
+        log_mask_recs = torch.empty_like(masks)
 
-        kl_sum = mask_kl_sum = 0.0
+        kl_sum = 0.0
 
         for slot in range(self.num_slots):
             if slot < self.num_slots - 1:
@@ -276,33 +273,23 @@ class MONet(nn.Module):
 
             # Reconstructions
             x_rec, log_mask_rec = torch.split(vae_out, self.im_channels, dim=1)
-            log_mask_rec = F.logsigmoid(log_mask_rec)
-
-            # Masked component reconstruction loss
             rec_dist = Normal(x_rec, scale)
-            rec_loss = log_mask + rec_dist.log_prob(x)
-            rec_loss = rec_loss.view(batch_size, -1)
-            rec_loss = rec_loss.sum(dim=-1)
-            logprobs[slot] = rec_loss
+            logprobs[:, slot] = log_mask + rec_dist.log_prob(x)
 
             # KL divergence with latent prior
             kl = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
             kl_sum += kl.sum(dim=-1)
 
-            # KL divergence between mask and reconstruction distributions
-            mask_p = Bernoulli(probs=clamp_probs(log_mask))
-            mask_q = Bernoulli(probs=clamp_probs(log_mask_rec))
-            mask_kl = kl_divergence(mask_p, mask_q).view(batch_size, -1)
-            mask_kl_sum += mask_kl.sum(dim=-1)
+            recs[:, slot] = x_rec
+            masks[:, slot] = torch.clamp_min(log_mask.exp(), min=1e-9)
+            log_mask_recs[:, slot] = log_mask_rec
 
-            recs[slot] = x_rec.detach()
-            masks[slot] = log_mask.detach()
+        rec_loss = -torch.logsumexp(logprobs, dim=1).sum() / batch_size
+        assert not torch.isnan(rec_loss), 'nan in mse'
+        kl_loss = kl_sum.mean()
+        assert not torch.isnan(kl_loss), 'nan in kl'
+        log_mask_recs = F.log_softmax(log_mask_recs, dim=1)
+        mask_loss = F.kl_div(log_mask_recs, masks, reduction='batchmean')
+        assert not torch.isnan(mask_loss), 'nan in mask kl'
 
-        r1 = -torch.logsumexp(logprobs, dim=0).mean()
-        assert not torch.isnan(r1), 'nan in mse'
-        r2 = kl_sum.mean()
-        assert not torch.isnan(r2), 'nan in kl'
-        r3 = mask_kl_sum.mean()
-        assert not torch.isnan(r3), 'nan in mask kl'
-
-        return r1, r2, r3, recs, masks
+        return rec_loss, kl_loss, mask_loss, recs, masks

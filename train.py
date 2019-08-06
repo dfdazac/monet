@@ -24,19 +24,21 @@ def config():
     num_slots = 5
     z_dim = 16
     beta = 0.5
-    gamma = 0.25
+    gamma = 0.5
     lr = 1e-4
+    batch_size = 64
     steps = 200000
 
 
 @ex.automain
-def train(dataset, num_slots, z_dim, beta, gamma, lr, steps, _run, _log):
+def train(dataset, num_slots, z_dim, beta, gamma, lr, batch_size,
+          steps, _run, _log):
     if len(_run.observers) == 0:
         _log.warning('Running without observers')
 
     train_file = os.path.join('data', dataset, 'data.pt')
     data = TensorDataset(torch.load(train_file))
-    loader = DataLoader(data, batch_size=16, shuffle=True, num_workers=1,
+    loader = DataLoader(data, batch_size, shuffle=True, num_workers=1,
                         drop_last=True)
     iterator = utils.make_data_iterator(loader)
     _, im_channels, im_size, _ = next(iter(loader))[0].shape
@@ -50,6 +52,7 @@ def train(dataset, num_slots, z_dim, beta, gamma, lr, steps, _run, _log):
 
     log_every = 500
     save_every = 10000
+    max_samples = 16
     metrics = defaultdict(float)
     successful = True
 
@@ -59,7 +62,7 @@ def train(dataset, num_slots, z_dim, beta, gamma, lr, steps, _run, _log):
             batch = next(iterator).to(device)
 
             # with torch.autograd.detect_anomaly():
-            mse, kl, mask_kl, recs, log_masks = model(batch)
+            mse, kl, mask_kl, recs, masks = model(batch)
             loss = mse + beta * kl + gamma * mask_kl
             optimizer.zero_grad()
             loss.backward()
@@ -90,13 +93,14 @@ def train(dataset, num_slots, z_dim, beta, gamma, lr, steps, _run, _log):
 
             # Save
             if step % save_every == 0:
-                recs = recs.reshape(-1, im_channels, 64, 64)
-                log_masks = torch.exp(log_masks).reshape(-1, 1, 64, 64)
-                num_cols = batch.shape[0]
+                recs = recs[:max_samples].reshape(-1, im_channels, 64, 64)
+                masks = masks[:max_samples].reshape(-1, 1, 64, 64)
+                num_cols = num_slots
 
-                utils.plot_examples(batch, f'original_{step:d}', num_cols)
+                utils.plot_examples(batch[:max_samples],
+                                    f'original_{step:d}', num_cols=1)
                 utils.plot_examples(recs, f'reconstruction_{step:d}', num_cols)
-                utils.plot_examples(log_masks, f'mask_{step:d}', num_cols)
+                utils.plot_examples(masks, f'mask_{step:d}', num_cols)
 
     except AssertionError as error:
         _log.error(error)
