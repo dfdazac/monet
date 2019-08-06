@@ -4,6 +4,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Normal, Bernoulli, kl_divergence
 
+from utils import plot_examples
+import matplotlib.pyplot as plt
+
 
 class VAE(nn.Module):
     """Variational Autoencoder with spatial broadcast decoder, or
@@ -262,6 +265,10 @@ class MONet(nn.Module):
 
         kl_sum = 0.0
 
+        # fig_count = 1
+        # plt.figure(fig_count)
+        # plot_examples(x, 'x', 1)
+
         for slot in range(self.num_slots):
             if slot < self.num_slots - 1:
                 log_mask, log_scope = self.attention(x, log_scope)
@@ -281,16 +288,28 @@ class MONet(nn.Module):
             kl_sum += kl.sum(dim=-1)
 
             mask_probs = torch.clamp_min(log_mask.exp(), min=1e-9)
-            recs[:, slot] = x_rec * mask_probs
+            recs[:, slot] = x_rec
             masks[:, slot] = mask_probs
             log_mask_recs[:, slot] = log_mask_rec
 
-        rec_loss = -torch.logsumexp(logprobs, dim=1).sum() / batch_size
-        assert not torch.isnan(rec_loss), 'nan in mse'
+        #     fig_count += 1
+        #     plt.figure(fig_count)
+        #     plot_examples(mask_probs, f'mask_{slot:d}', 1)
+        #
+        #     fig_count += 1
+        #     plt.figure(fig_count)
+        #     plot_examples(x_rec, f'rec_{slot:d}', 1)
+        #
+        # fig_count += 1
+        # plt.figure(fig_count)
+        # plot_examples(recs.sum(dim=1), 'rec', 1)
+
+        nll = -torch.logsumexp(logprobs, dim=1).sum() / batch_size
+        # assert not torch.isnan(nll), 'nan in nll'
         kl_loss = kl_sum.mean()
-        assert not torch.isnan(kl_loss), 'nan in kl'
+        # assert not torch.isnan(kl_loss), 'nan in kl'
         log_mask_recs = F.log_softmax(log_mask_recs, dim=1)
         mask_loss = F.kl_div(log_mask_recs, masks, reduction='batchmean')
-        assert not torch.isnan(mask_loss), 'nan in mask kl'
+        # assert not torch.isnan(mask_loss), 'nan in mask kl'
 
-        return rec_loss, kl_loss, mask_loss, recs, masks
+        return nll, kl_loss, mask_loss, recs, masks
