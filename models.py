@@ -1,11 +1,7 @@
-import math
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.distributions import Normal, Bernoulli, kl_divergence
-
-from utils import plot_examples
-import matplotlib.pyplot as plt
+from torch.distributions import Normal
 
 
 class VAE(nn.Module):
@@ -236,7 +232,7 @@ class AttentionNetwork(nn.Module):
 
 
 class MONet(nn.Module):
-    def __init__(self, im_size, im_channels, num_slots, z_dim):
+    def __init__(self, im_size, im_channels, num_slots, z_dim, scale):
         super(MONet, self).__init__()
 
         self.component_vae = VAE(im_size, im_channels + 1, z_dim)
@@ -248,7 +244,7 @@ class MONet(nn.Module):
 
         init_scope = torch.zeros((1, 1, im_size, im_size))
         self.register_buffer('init_scope', init_scope)
-        scale = torch.empty((1, 1, 1, 1)).fill_(0.1)
+        scale = torch.empty((1, 1, 1, 1)).fill_(scale)
         self.register_buffer('scale', scale)
 
     def forward(self, x):
