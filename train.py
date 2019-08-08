@@ -3,7 +3,7 @@ from collections import defaultdict
 import sacred
 import torch
 from torch.utils.data import TensorDataset, DataLoader
-from sacred.utils import SacredInterrupt
+import matplotlib.pyplot as plt
 
 from models import MONet
 import utils
@@ -18,7 +18,8 @@ utils.add_observers(ex)
 def config():
     dataset = 'circles'
     num_slots = 5
-    z_dim = 16
+    z_dim = 10
+    scale = 0.09
     beta = 0.5
     gamma = 0.5
     lr = 1e-4
@@ -27,7 +28,7 @@ def config():
 
 
 @ex.automain
-def train(dataset, num_slots, z_dim, beta, gamma, lr, batch_size,
+def train(dataset, num_slots, z_dim, scale, beta, gamma, lr, batch_size,
           steps, _run, _log):
     if len(_run.observers) == 0:
         _log.warning('Running without observers')
@@ -39,15 +40,15 @@ def train(dataset, num_slots, z_dim, beta, gamma, lr, batch_size,
     iterator = utils.make_data_iterator(loader)
     _, im_channels, im_size, _ = next(iter(loader))[0].shape
 
-    model = MONet(im_size, im_channels, num_slots, z_dim).to(device)
+    model = MONet(im_size, im_channels, num_slots, z_dim, scale).to(device)
 
     # model.load_state_dict(torch.load('monet_sprites_multi.pt',
     #                                  map_location='cpu'))
 
     optimizer = torch.optim.Adam(model.parameters(), lr)
 
-    log_every = 500
-    save_every = 10000
+    log_every = 200
+    save_every = 5000
     max_samples = 16
     metrics = defaultdict(float)
 
@@ -65,6 +66,8 @@ def train(dataset, num_slots, z_dim, beta, gamma, lr, batch_size,
         metrics['kl'] += kl.item()
         metrics['mask_kl'] += mask_kl.item()
         metrics['loss'] += loss.item()
+        metrics['bg_scale'] += model.bg_scale.data.item()
+        metrics['fg_scale'] += model.fg_scale.data.item()
         if step % log_every == 0:
             log = f'[{step:d}/{steps:d}] '
             for m in metrics:
@@ -88,7 +91,7 @@ def train(dataset, num_slots, z_dim, beta, gamma, lr, batch_size,
             utils.plot_examples(x, f'original_{step:d}', num_cols=1)
             utils.plot_examples(recs, f'reconstruction_{step:d}', num_slots)
             utils.plot_examples(masks, f'mask_{step:d}', num_slots)
-            utils.plot_examples(final, 'final', num_cols=1)
+            utils.plot_examples(final, f'final_{step:d}', num_cols=1)
 
     model_file = f'monet_{dataset}.pt'
     torch.save(model.state_dict(), model_file)
