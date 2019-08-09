@@ -244,15 +244,12 @@ class MONet(nn.Module):
 
         init_scope = torch.zeros((1, 1, im_size, im_size))
         self.register_buffer('init_scope', init_scope)
-
-        self.fg_scale = nn.Parameter(torch.zeros(1, 1, 1, 1))
-        self.bg_scale = nn.Parameter(torch.zeros(1, 1, 1, 1))
+        self.register_buffer('scale', torch.empty((1, 1, 1, 1)).fill_(scale))
 
     def forward(self, x):
         batch_size = x.shape[0]
         log_scope = self.init_scope.expand(batch_size, -1, -1, -1)
-        fg_scale = self.fg_scale.expand_as(x)
-        bg_scale = self.bg_scale.expand_as(x)
+        scale = self.scale.expand_as(x)
 
         logprobs = torch.empty(batch_size, self.num_slots, self.im_channels,
                                self.im_size, self.im_size).to(x.device)
@@ -273,7 +270,6 @@ class MONet(nn.Module):
             mu, logvar, vae_out = self.component_vae(vae_in)
 
             # Reconstructions
-            scale = F.softplus(fg_scale if slot > 0 else bg_scale)
             x_rec, log_mask_rec = torch.split(vae_out, self.im_channels, dim=1)
             rec_dist = Normal(x_rec, scale)
             logprobs[:, slot] = log_mask + rec_dist.log_prob(x)

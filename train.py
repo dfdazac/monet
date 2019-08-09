@@ -19,7 +19,7 @@ def config():
     dataset = 'circles'
     num_slots = 5
     z_dim = 10
-    scale = 0.09
+    scale = 0.25
     beta = 0.5
     gamma = 0.5
     lr = 1e-4
@@ -66,8 +66,6 @@ def train(dataset, num_slots, z_dim, scale, beta, gamma, lr, batch_size,
         metrics['kl'] += kl.item()
         metrics['mask_kl'] += mask_kl.item()
         metrics['loss'] += loss.item()
-        metrics['bg_scale'] += model.bg_scale.data.item()
-        metrics['fg_scale'] += model.fg_scale.data.item()
         if step % log_every == 0:
             log = f'[{step:d}/{steps:d}] '
             for m in metrics:
