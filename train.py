@@ -23,7 +23,7 @@ def config():
     beta = 0.5
     gamma = 0.5
     lr = 1e-4
-    batch_size = 16
+    batch_size = 64
     steps = 200000
 
 
@@ -41,14 +41,10 @@ def train(dataset, num_slots, z_dim, scale, beta, gamma, lr, batch_size,
     _, im_channels, im_size, _ = next(iter(loader))[0].shape
 
     model = MONet(im_size, im_channels, num_slots, z_dim, scale).to(device)
+    optimizer = torch.optim.RMSprop(model.parameters(), lr)
 
-    # model.load_state_dict(torch.load('monet_sprites_multi.pt',
-    #                                  map_location='cpu'))
-
-    optimizer = torch.optim.Adam(model.parameters(), lr)
-
-    log_every = 200
-    save_every = 5000
+    log_every = 500
+    save_every = 10000
     max_samples = 16
     metrics = defaultdict(float)
 

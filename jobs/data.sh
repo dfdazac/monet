@@ -15,7 +15,7 @@
 SRC_DIR=monet
 DATA_DIR=data
 DATASET=sprites_multi
-SAMPLES=100000
+SAMPLES=200000
 
 # Copy data to scratch
 cp -r $HOME/$SRC_DIR/$DATA_DIR $TMPDIR
