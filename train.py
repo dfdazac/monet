@@ -3,7 +3,6 @@ from collections import defaultdict
 import sacred
 import torch
 from torch.utils.data import TensorDataset, DataLoader
-import matplotlib.pyplot as plt
 
 from models import MONet
 import utils
@@ -16,15 +15,15 @@ utils.add_observers(ex)
 # noinspection PyUnusedLocal
 @ex.config
 def config():
-    dataset = 'circles'
+    dataset = 'sprites_multi'
     num_slots = 5
     z_dim = 10
     scale = 0.25
     beta = 0.5
-    gamma = 0.5
+    gamma = 0.25
     lr = 1e-4
     batch_size = 64
-    steps = 200000
+    steps = 60000
 
 
 @ex.automain
