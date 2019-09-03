@@ -38,4 +38,3 @@ With the default options, the training script trains MONet with 5 slots, using a
 ```sh
 python train.py
 ```
-```
