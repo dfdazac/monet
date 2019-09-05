@@ -128,3 +128,4 @@ dmypy.json
 
 # Data
 *.pt
+!notebooks/*.pt

@@ -38,3 +38,5 @@ With the default options, the training script trains MONet with 5 slots, using a
 ```sh
 python train.py
 ```
+
+Also check out the notebooks folder for examples with pretrained models.
